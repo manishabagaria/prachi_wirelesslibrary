@@ -1,0 +1,84 @@
+import React from 'react';
+import { Text, View, TouchableOpacity, TextInput, Image, StyleSheet} from 'react-native';
+import * as Permissions from 'expo-permissions';
+import { BarCodeScanner } from 'expo-barcode-scanner';
+import firebase from 'firebase';
+import db from '../config';
+
+export default class TransactionScreen extends React.Component {
+  constructor(){
+    super();
+    this.state = {
+      hasCameraPermissions : null,
+      scanned : false,
+      scannedBookId : '',
+      scannedStudentId : '',
+      buttonState : 'normal',
+      transactionMessage : ''
+    }
+  }
+
+  getCameraPermissions = async (id) =>{
+    const {status}  = await Permissions.askAsync(Permissions.CAMERA);
+
+    this.setState({
+      /*status === "granted" is true when user has granted permission
+        status === "granted" is false when user has not granted the permission
+      */
+      hasCameraPermissions : status === "granted",
+      buttonState : id,
+      scanned : false
+    })
+  }
+
+  handleBarCodeScanned  = async ({type, data})=>{
+    const { buttonState} = this.state
+
+    if(buttonState === "BookId"){
+      this.setState({
+        scanned : true,
+        scannedBookId : data,
+        buttonState : 'normal'
+      });
+    }
+    else if(buttonState === "StudentId"){
+      this.setState({
+        scanned : true,
+        scannedStudentId : data,
+        buttonState : 'normal'
+      })
+    }
+  }
+
+  initiateBookIssue = async ()=>{
+    //add a transaction
+    db.collection("transaction").add({
+      'studentId' : this.state.scannedStudentId,
+      'bookId' : this.state.scannedBookId,
+      'data' : firebase.firestore.Timestamp.now().toDate(),
+      'transactionType' : "Issue"
+    })
+
+    //change book status
+    db.collection("books").doc(this.state.scannedBookId).update({
+      'bookAvailability' : false
+    })
+    //change number of issued books for student
+    db.collection("students").doc(this.state.scannedStudentId).update({
+      'numberOfBooksIssued' : firebase.firestore.FieldValue.increment(1)
+    })
+
+    this.setState({
+      scannedStudentId : '',
+      scannedBookId: ''
+    })
+  }
+
+  initiateBookReturn = async ()=>{
+    //add a transaction
+    db.collection("transactions").add({
+      'studentId' : this.state.scannedStudentId,
+      'bookId' : this.state.scannedBookId,
+      'date'   : firebase.firestore.Timestamp.now().toDate(),
+      'transactionType' : "Return"
+    })
